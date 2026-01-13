@@ -23,13 +23,9 @@ func main() {
 	}
 	defer con.Close()
 	fmt.Println("connected to RabbitMQ")
-	newChannel, err := con.Channel()
-	defer newChannel.Close()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to create channel: %v\n", err)
-		os.Exit(1)
-	}
-
+	queueName := "game_logs"
+	routingKey := "game_logs.*"
+	newChannel, _, err := pubsub.DeclareAndBind(con, routing.ExchangePerilTopic, queueName, routingKey, pubsub.SimpleQueueDurable)
 	// wait for ctrl+c
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt)
