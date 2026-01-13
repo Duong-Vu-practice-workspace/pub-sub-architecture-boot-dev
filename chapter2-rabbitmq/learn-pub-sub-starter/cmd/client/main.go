@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/gamelogic"
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/pubsub"
@@ -26,10 +27,44 @@ func main() {
 	newChannel, queue, err := pubsub.DeclareAndBind(con, routing.ExchangePerilDirect, queueName, routing.PauseKey, pubsub.SimpleQueueTransient)
 	defer newChannel.Close()
 	fmt.Printf("declared transient queue %s\n", queue.Name)
+	gameState := gamelogic.NewGameState(username)
 	// wait for ctrl+c
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt)
-	<-sigCh
-	fmt.Println("shutdown signal received, exiting")
+	for {
+		select {
+		case <-sigCh:
+			fmt.Println("shutdown signal received, exiting")
+			return
+		default:
+		}
+		words := gamelogic.GetInput()
+		if len(words) == 0 {
+			continue
+		}
+		switch words[0] {
+		case "spawn":
+			err := gameState.CommandSpawn(words)
+			if err != nil {
+				fmt.Println(err.Error())
+			}
+		case "move":
+			_, err := gameState.CommandMove(words)
+			if err != nil {
+				fmt.Println(err.Error())
+			} else {
+				fmt.Println(strings.Join(words, " "))
+			}
+		case "status":
+			gameState.CommandStatus()
+		case "spam":
+			fmt.Println("Spamming not allowed yet!")
+		case "quit":
+			gamelogic.PrintQuit()
+			return
+		default:
+			fmt.Println("invalid command")
+		}
+	}
 
 }
