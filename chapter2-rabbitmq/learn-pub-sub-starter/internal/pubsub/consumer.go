@@ -68,6 +68,10 @@ func subscribe[T any](
 	if err != nil {
 		return err
 	}
+	err = ch.Qos(10, 0, false)
+	if err != nil {
+		return err
+	}
 	deli, err := ch.Consume(queue.Name, "", false, false, false, false, nil)
 	if err != nil {
 		return err
