@@ -62,14 +62,26 @@ func main() {
 		os.Exit(1)
 	}
 
-	queueName := "game_logs"
-	routingKey := "game_logs.*"
-	newChannel, _, err := pubsub.DeclareAndBind(con, routing.ExchangePerilTopic, queueName, routingKey, pubsub.SimpleQueueDurable)
+	err = pubsub.SubscribeGob(
+		con,
+		routing.ExchangePerilTopic,
+		routing.GameLogSlug,
+		fmt.Sprintf("%s.*", routing.GameLogSlug),
+		pubsub.SimpleQueueDurable,
+		func(gl routing.GameLog) pubsub.AckType {
+			defer fmt.Print("> ")
+			err := gamelogic.WriteLog(gl)
+			if err != nil {
+				fmt.Printf("error writing log: %v\n", err)
+				return pubsub.NackRequeue
+			}
+			return pubsub.Ack
+		},
+	)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to declare and bind: %v\n", err)
+		fmt.Fprintf(os.Stderr, "failed to subscribe to game logs: %v\n", err)
 		os.Exit(1)
 	}
-	defer newChannel.Close()
 	// wait for ctrl+c
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt)
