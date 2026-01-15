@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/gamelogic"
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/pubsub"
@@ -47,26 +48,46 @@ func handlerMove(gs *gamelogic.GameState, publishCh *amqp.Channel, username stri
 	}
 }
 
-func handlerWar(gs *gamelogic.GameState) func(gamelogic.RecognitionOfWar) pubsub.AckType {
+func handlerWar(gs *gamelogic.GameState, publishCh *amqp.Channel, username string) func(gamelogic.RecognitionOfWar) pubsub.AckType {
 	return func(rw gamelogic.RecognitionOfWar) pubsub.AckType {
 		defer fmt.Print("> ")
-		outcome, _, _ := gs.HandleWar(rw)
+		outcome, winner, loser := gs.HandleWar(rw)
 		switch outcome {
 		case gamelogic.WarOutcomeNotInvolved:
 			return pubsub.NackRequeue
 		case gamelogic.WarOutcomeNoUnits:
 			return pubsub.NackDiscard
-		case gamelogic.WarOutcomeOpponentWon:
-			return pubsub.Ack
-		case gamelogic.WarOutcomeYouWon:
-			return pubsub.Ack
-		case gamelogic.WarOutcomeDraw:
+		case gamelogic.WarOutcomeOpponentWon, gamelogic.WarOutcomeYouWon, gamelogic.WarOutcomeDraw:
+			var msg string
+			if outcome == gamelogic.WarOutcomeDraw {
+				msg = fmt.Sprintf("A war between %s and %s resulted in a draw", winner, loser)
+			} else {
+				msg = fmt.Sprintf("%s won a war against %s", winner, loser)
+			}
+			err := publishGameLog(publishCh, rw.Attacker.Username, msg, username)
+			if err != nil {
+				fmt.Printf("error publishing game log: %v\n", err)
+				return pubsub.NackRequeue
+			}
 			return pubsub.Ack
 		default:
 			fmt.Println("error: unknown war outcome")
 			return pubsub.NackDiscard
 		}
 	}
+}
+
+func publishGameLog(publishCh *amqp.Channel, attackerUsername, msg, clientUsername string) error {
+	return pubsub.PublishGob(
+		publishCh,
+		routing.ExchangePerilTopic,
+		fmt.Sprintf("%s.%s", routing.GameLogSlug, attackerUsername),
+		routing.GameLog{
+			CurrentTime: time.Now(),
+			Message:     msg,
+			Username:    clientUsername,
+		},
+	)
 }
 func main() {
 	fmt.Println("Starting Peril client...")
@@ -144,7 +165,7 @@ func main() {
 		"war",
 		fmt.Sprintf("%s.*", routing.WarRecognitionsPrefix),
 		pubsub.SimpleQueueDurable,
-		handlerWar(gameState),
+		handlerWar(gameState, publishCh, username),
 	)
 	if err != nil {
 		fmt.Printf("failed to subscribe to war: %v\n", err)
