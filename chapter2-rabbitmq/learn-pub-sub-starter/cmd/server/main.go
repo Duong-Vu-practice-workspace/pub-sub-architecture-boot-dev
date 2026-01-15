@@ -41,6 +41,27 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Declare dead letter exchange
+	err = publishCh.ExchangeDeclare(routing.ExchangePerilDLX, "fanout", true, false, false, false, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to declare dead letter exchange: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Declare dead letter queue
+	_, err = publishCh.QueueDeclare("peril_dlq", true, false, false, false, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to declare dead letter queue: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Bind dead letter queue to dead letter exchange
+	err = publishCh.QueueBind("peril_dlq", "", routing.ExchangePerilDLX, false, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to bind dead letter queue: %v\n", err)
+		os.Exit(1)
+	}
+
 	queueName := "game_logs"
 	routingKey := "game_logs.*"
 	newChannel, _, err := pubsub.DeclareAndBind(con, routing.ExchangePerilTopic, queueName, routingKey, pubsub.SimpleQueueDurable)

@@ -28,7 +28,13 @@ func DeclareAndBind(
 		isAutoDelete = false
 		isExclusive = false
 	}
-	queue, err := newChannel.QueueDeclare(queueName, isDurable, isAutoDelete, isExclusive, false, nil)
+
+	// Configure dead letter exchange
+	args := amqp.Table{
+		"x-dead-letter-exchange": "peril_dlx",
+	}
+
+	queue, err := newChannel.QueueDeclare(queueName, isDurable, isAutoDelete, isExclusive, false, args)
 	if err != nil {
 		return nil, amqp.Queue{}, err
 	}
