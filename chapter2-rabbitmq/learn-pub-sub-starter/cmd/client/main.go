@@ -12,6 +12,12 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
+func handlerPause(gs *gamelogic.GameState) func(routing.PlayingState) {
+	return func(ps routing.PlayingState) {
+		defer fmt.Print("> ")
+		gs.HandlePause(ps)
+	}
+}
 func main() {
 	fmt.Println("Starting Peril client...")
 	connStr := "amqp://guest:guest@localhost:5672/"
@@ -23,11 +29,23 @@ func main() {
 	defer con.Close()
 	fmt.Println("connected to RabbitMQ")
 	username, err := gamelogic.ClientWelcome()
-	queueName := fmt.Sprintf("pause.%s", username)
-	newChannel, queue, err := pubsub.DeclareAndBind(con, routing.ExchangePerilDirect, queueName, routing.PauseKey, pubsub.SimpleQueueTransient)
-	defer newChannel.Close()
-	fmt.Printf("declared transient queue %s\n", queue.Name)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to get username: %v\n", err)
+		os.Exit(1)
+	}
 	gameState := gamelogic.NewGameState(username)
+
+	err = pubsub.SubscribeJSON(
+		con,
+		routing.ExchangePerilDirect,
+		fmt.Sprintf("pause.%s", username),
+		routing.PauseKey,
+		pubsub.SimpleQueueTransient,
+		handlerPause(gameState),
+	)
+	if err != nil {
+		fmt.Printf("failed to subscribe to pause messages: %v\n", err)
+	}
 	// wait for ctrl+c
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt)

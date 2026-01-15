@@ -28,11 +28,13 @@ func DeclareAndBind(
 		isAutoDelete = false
 		isExclusive = false
 	}
-	defer newChannel.Close()
 	queue, err := newChannel.QueueDeclare(queueName, isDurable, isAutoDelete, isExclusive, false, nil)
 	if err != nil {
-		return newChannel, amqp.Queue{}, err
+		return nil, amqp.Queue{}, err
 	}
-	err = newChannel.QueueBind(queueName, exchange, key, false, nil)
+	err = newChannel.QueueBind(queueName, key, exchange, false, nil)
+	if err != nil {
+		return nil, amqp.Queue{}, err
+	}
 	return newChannel, queue, nil
 }

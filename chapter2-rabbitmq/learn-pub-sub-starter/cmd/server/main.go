@@ -23,9 +23,32 @@ func main() {
 	}
 	defer con.Close()
 	fmt.Println("connected to RabbitMQ")
+
+	publishCh, err := con.Channel()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to open channel: %v\n", err)
+		os.Exit(1)
+	}
+	defer publishCh.Close()
+	err = publishCh.ExchangeDeclare(routing.ExchangePerilDirect, "direct", true, false, false, false, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to declare exchange: %v\n", err)
+		os.Exit(1)
+	}
+	err = publishCh.ExchangeDeclare(routing.ExchangePerilTopic, "topic", true, false, false, false, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to declare exchange: %v\n", err)
+		os.Exit(1)
+	}
+
 	queueName := "game_logs"
 	routingKey := "game_logs.*"
 	newChannel, _, err := pubsub.DeclareAndBind(con, routing.ExchangePerilTopic, queueName, routingKey, pubsub.SimpleQueueDurable)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to declare and bind: %v\n", err)
+		os.Exit(1)
+	}
+	defer newChannel.Close()
 	// wait for ctrl+c
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt)
@@ -48,7 +71,7 @@ func main() {
 		case "pause":
 			fmt.Println("sending pause message")
 			data := routing.PlayingState{IsPaused: true}
-			if err := pubsub.PublishJSON(newChannel, routing.ExchangePerilDirect, routing.PauseKey, data); err != nil {
+			if err := pubsub.PublishJSON(publishCh, routing.ExchangePerilDirect, routing.PauseKey, data); err != nil {
 				fmt.Fprintf(os.Stderr, "failed to publish pause: %v\n", err)
 			} else {
 				fmt.Println("pause published")
@@ -56,7 +79,7 @@ func main() {
 		case "resume":
 			fmt.Println("sending resume message")
 			data := routing.PlayingState{IsPaused: false}
-			if err := pubsub.PublishJSON(newChannel, routing.ExchangePerilDirect, routing.PauseKey, data); err != nil {
+			if err := pubsub.PublishJSON(publishCh, routing.ExchangePerilDirect, routing.PauseKey, data); err != nil {
 				fmt.Fprintf(os.Stderr, "failed to publish resume: %v\n", err)
 			} else {
 				fmt.Println("resume published")
