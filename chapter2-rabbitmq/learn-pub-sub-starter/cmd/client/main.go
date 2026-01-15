@@ -33,6 +33,20 @@ func main() {
 		fmt.Fprintf(os.Stderr, "failed to get username: %v\n", err)
 		os.Exit(1)
 	}
+
+	// Declare the exchange
+	ch, err := con.Channel()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to open channel: %v\n", err)
+		os.Exit(1)
+	}
+	err = ch.ExchangeDeclare(routing.ExchangePerilDirect, "direct", true, false, false, false, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to declare exchange: %v\n", err)
+		os.Exit(1)
+	}
+	ch.Close()
+
 	gameState := gamelogic.NewGameState(username)
 
 	err = pubsub.SubscribeJSON(
